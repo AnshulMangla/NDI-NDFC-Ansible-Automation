@@ -2,8 +2,8 @@
   gather_facts: true
 
   vars:
-    ig_name:   nveesams-NDI
-    site_name: SJ-DC1-Site1
+    ig_name:   changeme_ig
+    site_name: changeme_site
 
   tasks:
   - name: Get epoches for latest and last_hour

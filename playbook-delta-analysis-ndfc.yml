@@ -1,0 +1,48 @@
+- hosts: nd1
+  gather_facts: true
+
+  vars:
+    ig_name:   nveesams-NDI
+    site_name: SJ-DC1-Site1
+
+  tasks:
+  - name: Get epoches for latest and last_hour
+    cisco.nd.nd_epoch:
+      insights_group: "{{ ig_name }}"
+      site:           "{{ site_name }}"
+      period:         "{{ item }}"
+    loop:
+    - latest
+    #- last_day
+    - last_hour
+    register: epoches
+
+  - name: set variables
+    set_fact:
+      jobId:   "{{ ansible_date_time.epoch }}"
+      latest:  "{{ epoches.results.0.current.epochId }}"
+      earlier: "{{ epoches.results.1.current.epochId }}"
+  
+  - debug: var=jobId
+  - debug: var=latest
+  - debug: var=earlier
+  
+  - name: Run a new delta analysis job using epoch UUIDs
+    cisco.nd.nd_delta_analysis:
+      insights_group:   "{{ ig_name }}"
+      site_name:        "{{ site_name }}"
+      name:             "anmangla_{{ jobId }}"
+      earlier_epoch_id: "{{ earlier }}"
+      later_epoch_id:   "{{ latest }}"
+      state:            present
+    register: delta_analysis_info
+
+  - name: Validate delta analysis
+    cisco.nd.nd_delta_analysis:
+      insights_group: "{{ ig_name }}"
+      site_name: "{{ site_name }}"
+      name: "anmangla_{{ jobId }}"
+      state: validate
+    register: delta_analysis_results
+  
+  - debug: var=delta_analysis_results

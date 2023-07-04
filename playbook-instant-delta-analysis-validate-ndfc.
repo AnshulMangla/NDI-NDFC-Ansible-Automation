@@ -1,0 +1,64 @@
+- hosts: nd1
+  gather_facts: true
+
+  vars:
+    ig_name:   CSS
+    site_name: EF-SITE1
+
+  tasks:
+  - name: Get epoches for latest and last_day
+    cisco.nd.nd_epoch:
+      insights_group: "{{ ig_name }}"
+      site:           "{{ site_name }}"
+      period:         "{{ item }}"
+    loop:
+    - latest
+    #- last_day
+    - last_hour
+    register: epoches  
+
+  - name: set variables
+    set_fact:
+      jobId:   "{{ ansible_date_time.epoch }}"
+      earlier: "{{ epoches.results.1.current.epochId }}"
+  
+  - debug: var=jobId
+  - debug: var=earlier           
+
+  - name: Trigger instant assurance analysis job
+    cisco.nd.nd_instant_assurance_analysis:
+      insights_group: "{{ ig_name }}"
+      site_name: "{{ site_name }}"
+      state: present
+    register: instant_analysis_triggered
+
+  - name: Wait until instant assurance analysis is completed
+    cisco.nd.nd_instant_assurance_analysis:
+      insights_group: "{{ ig_name }}"
+      site_name: "{{ site_name }}"
+      job_id: "{{ instant_analysis_triggered.current.jobId }}"
+      state: query
+    register: instant_analysis_info
+    until: instant_analysis_info.current.operSt == "COMPLETE"
+    retries: 200
+    delay: 6
+  
+  - name: Run a new delta analysis job using epoch UUIDs
+    cisco.nd.nd_delta_analysis:
+      insights_group:   "{{ ig_name }}"
+      site_name:        "{{ site_name }}"
+      name:             "anmangla_{{ jobId }}"
+      earlier_epoch_id: "{{ earlier }}"
+      later_epoch_id:   "{{ instant_analysis_info.current.epochInfo.epochId }}"
+      state:            present
+    register: delta_analysis_info
+
+  - name: Validate delta analysis
+    cisco.nd.nd_delta_analysis:
+      insights_group: "{{ ig_name }}"
+      site_name: "{{ site_name }}"
+      name: "anmangla_{{ jobId }}"
+      state: validate
+    register: delta_analysis_results
+  
+  - debug: var=delta_analysis_results
